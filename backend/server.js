@@ -26,15 +26,14 @@ const PORT = process.env.PORT || 5000;
 connectDB();
 
 // Allow the configured frontends, comma-separated.
-const allowedOrigins = ("*" )
+//  const allowedOrigins = ("*" )
   // .split(",")
   // .map((o) => o.trim())
   // .filter(Boolean);
 
 app.use(
   cors({
-    origin: allowedOrigins,
-    credentials: true,
+    origin: "*"
   })
 );
 
@@ -79,7 +78,7 @@ app.use(errorHandler);
 
 app.listen(PORT, () => {
   console.log(`🌱 Kanisha Enterprises API running on port ${PORT}`);
-  console.log(`   CORS allowed for: ${allowedOrigins.join(", ")}`);
+  //console.log(`   CORS allowed for: ${allowedOrigins.join(", ")}`);
 });
 
 // Indexes must be built after the connection is up. Without this, the
