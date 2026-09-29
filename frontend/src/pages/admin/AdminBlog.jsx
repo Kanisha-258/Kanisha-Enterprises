@@ -107,7 +107,10 @@ export default function AdminBlog() {
         .split(",")
         .map((t) => t.trim())
         .filter(Boolean),
-      // Let the backend generate a slug when creating.
+      // Send a slug when creating. The backend also derives one from the title
+      // if it's missing, so this is a convenience rather than a requirement.
+      // Deliberately omitted when editing: changing a published post's slug
+      // would break its existing /blog/<slug> URL.
       ...(editing ? {} : { slug: slugify(form.title) }),
     };
 

@@ -84,7 +84,10 @@ const getAdminBlogs = asyncHandler(async (req, res) => {
   }
 
   const [blogs, total] = await Promise.all([
-    Blog.find(filter).select("-content").sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
+    // `content` is included here (unlike the public list above) because the
+    // admin editor populates its form from these rows. Excluding it left the
+    // body empty, and since it is a required field the form would not submit.
+    Blog.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
     Blog.countDocuments(filter),
   ]);
 
@@ -100,14 +103,18 @@ const getAdminBlogs = asyncHandler(async (req, res) => {
 
 // POST /api/blogs   (protected + admin)
 const createBlog = asyncHandler(async (req, res) => {
-  const { title, excerpt, content, coverImage, tags, isPublished, author } = req.body;
+  const { title, excerpt, content, coverImage, slug, tags, isPublished, author } = req.body;
 
   if (!title || !excerpt || !content) {
     throw new AppError("Title, excerpt and content are all required", 400);
   }
 
   const blog = await Blog.create({
-    title,
+    title: title.trim(),
+    // Only used when supplied; otherwise the model derives one from the title.
+    // This was missing, so the required `slug` never reached the document and
+    // every create failed with "Path `slug` is required".
+    ...(slug ? { slug: slug.trim().toLowerCase() } : {}),
     excerpt,
     content,
     coverImage: coverImage || "",
