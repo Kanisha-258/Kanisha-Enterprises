@@ -1,0 +1,327 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   Kanisha Enterprises — design system
+   "Modern agri": deep field greens, warm clay accents, soft shadows,
+   generous spacing. Neutrals are warm-tinted rather than cold grey so the
+   whole page feels earthy rather than clinical.
+   ========================================================================== */
+
+@theme {
+  /* -- Brand greens: 50 lightest → 950 deepest ------------------ */
+  --color-brand-50: #f2fbf4;
+  --color-brand-100: #def6e3;
+  --color-brand-200: #bfeac9;
+  --color-brand-300: #93d8a4;
+  --color-brand-400: #5dbd78;
+  --color-brand-500: #379e55;
+  --color-brand-600: #268043;
+  --color-brand-700: #1f6637;
+  --color-brand-800: #1c5130;
+  --color-brand-900: #18432a;
+  --color-brand-950: #0b2417;
+
+  /* -- Wheat / lime: the "harvest" accent ----------------------- */
+  --color-wheat-50: #fdf9ed;
+  --color-wheat-100: #faf0d3;
+  --color-wheat-200: #f3dfa6;
+  --color-wheat-300: #eac871;
+  --color-wheat-400: #e0ad3d;
+  --color-wheat-500: #d1912a;
+  --color-wheat-600: #b47121;
+  --color-wheat-700: #8f561e;
+  --color-wheat-800: #77451f;
+  --color-wheat-900: #653a1d;
+
+  /* -- Clay: earth accent for CTAs and highlights ---------------- */
+  --color-clay-50: #fdf6f3;
+  --color-clay-100: #fbeae2;
+  --color-clay-200: #f6d2c2;
+  --color-clay-300: #eeb098;
+  --color-clay-400: #e4856a;
+  --color-clay-500: #dd6546;
+  --color-clay-600: #c44a2c;
+  --color-clay-700: #a53a24;
+  --color-clay-800: #883224;
+  --color-clay-900: #712d21;
+
+  /* -- Warm neutrals: replaces the cold default greys ----------- */
+  --color-sand-50: #fafaf8;
+  --color-sand-100: #f5f5f1;
+  --color-sand-200: #e9e9e2;
+  --color-sand-300: #d6d6cb;
+  --color-sand-400: #a9a99b;
+  --color-sand-500: #828276;
+  --color-sand-600: #65655c;
+  --color-sand-700: #52524b;
+  --color-sand-800: #3a3a35;
+  --color-sand-900: #26261f;
+  --color-sand-950: #17170f;
+
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+  --font-display: "Fraunces", "Plus Jakarta Sans", ui-serif, Georgia, serif;
+
+  --shadow-soft: 0 1px 2px rgb(23 23 15 / 0.04), 0 4px 16px rgb(23 23 15 / 0.06);
+  --shadow-lift: 0 2px 4px rgb(23 23 15 / 0.05), 0 12px 32px rgb(23 23 15 / 0.1);
+  --shadow-glow: 0 8px 40px rgb(38 128 67 / 0.25);
+
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ==========================================================================
+   Base
+   ========================================================================== */
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    /* Offset anchor jumps so the sticky header doesn't cover the target. */
+    scroll-padding-top: 6rem;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    min-width: 320px;
+    background-color: var(--color-sand-50);
+    color: var(--color-sand-900);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4 {
+    letter-spacing: -0.022em;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  /* Only show focus rings for keyboard users. */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-600);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  button, a {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Slimmer, themed scrollbar on supporting browsers. */
+  @supports (scrollbar-width: thin) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: var(--color-brand-300) transparent;
+    }
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--color-brand-300);
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-brand-400);
+  }
+}
+
+/* ==========================================================================
+   Component utilities
+   ========================================================================== */
+
+@layer components {
+  /* Card surface used across products, orders and blog */
+  .card {
+    background-color: #fff;
+    border: 1px solid var(--color-sand-200);
+    border-radius: var(--radius-2xl, 1rem);
+    box-shadow: var(--shadow-soft);
+  }
+
+  .card-hover {
+    transition:
+      transform 0.4s var(--ease-out-soft),
+      box-shadow 0.4s var(--ease-out-soft),
+      border-color 0.4s var(--ease-out-soft);
+  }
+  .card-hover:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lift);
+    border-color: var(--color-brand-200);
+  }
+
+  /* Gradient text for headline accents */
+  .text-gradient {
+    background-image: linear-gradient(
+      100deg,
+      var(--color-brand-600) 0%,
+      var(--color-brand-400) 45%,
+      var(--color-wheat-500) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Subtle repeating leaf/sprout texture for hero backgrounds */
+  .bg-grain {
+    background-image: radial-gradient(
+      circle at 1px 1px,
+      rgb(38 128 67 / 0.09) 1px,
+      transparent 0
+    );
+    background-size: 22px 22px;
+  }
+
+  /* Shine sweep used on primary buttons */
+  .btn-shine {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .btn-shine::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      110deg,
+      transparent 20%,
+      rgb(255 255 255 / 0.35) 50%,
+      transparent 80%
+    );
+    transform: translateX(-120%);
+    transition: transform 0.7s var(--ease-out-soft);
+    pointer-events: none;
+  }
+  .btn-shine:hover::after {
+    transform: translateX(120%);
+  }
+
+  /* Animated underline for active nav links */
+  .nav-underline {
+    position: relative;
+  }
+  .nav-underline::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: -4px;
+    height: 2px;
+    width: 100%;
+    background-color: var(--color-brand-500);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.3s var(--ease-out-soft);
+  }
+  .nav-underline:hover::after,
+  .nav-underline-active::after {
+    transform: scaleX(1);
+  }
+
+  /* Clamp helpers for text */
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
+
+/* ==========================================================================
+   Keyframes
+   ========================================================================== */
+
+@keyframes ke-float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(-14px) rotate(2deg); }
+}
+
+@keyframes ke-float-slow {
+  0%, 100% { transform: translateY(0) translateX(0); }
+  33%      { transform: translateY(-20px) translateX(8px); }
+  66%      { transform: translateY(-10px) translateX(-8px); }
+}
+
+@keyframes ke-spin-slow {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes ke-shimmer {
+  100% { transform: translateX(100%); }
+}
+
+@keyframes ke-marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+@keyframes ke-pulse-ring {
+  0%   { transform: scale(0.9); opacity: 0.6; }
+  70%  { transform: scale(1.6); opacity: 0; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+@keyframes ke-rise {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-float { animation: ke-float 6s ease-in-out infinite; }
+.animate-float-slow { animation: ke-float-slow 18s ease-in-out infinite; }
+.animate-spin-slow { animation: ke-spin-slow 22s linear infinite; }
+.animate-marquee { animation: ke-marquee 32s linear infinite; }
+.animate-rise { animation: ke-rise 0.7s var(--ease-out-soft) both; }
+
+/* Skeleton shimmer */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--color-sand-200);
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    rgb(255 255 255 / 0.65),
+    transparent
+  );
+  animation: ke-shimmer 1.6s infinite;
+}
+
+/* ==========================================================================
+   Accessibility — respect the user's motion preference
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
