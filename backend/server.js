@@ -26,10 +26,10 @@ const PORT = process.env.PORT || 5000;
 connectDB();
 
 // Allow the configured frontends, comma-separated.
-const allowedOrigins = (process.env.CLIENT_URL || "http://localhost:5173")
-  .split(",")
-  .map((o) => o.trim())
-  .filter(Boolean);
+const allowedOrigins = ("*" )
+  // .split(",")
+  // .map((o) => o.trim())
+  // .filter(Boolean);
 
 app.use(
   cors({
