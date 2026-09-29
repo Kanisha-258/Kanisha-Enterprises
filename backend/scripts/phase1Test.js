@@ -27,6 +27,10 @@ const check = (name, ok, detail = "") => {
   else { failed++; console.log(`  FAIL  ${name}${detail ? ` -> ${detail}` : ""}`); }
 };
 
+const skip = (name, reason) => {
+  console.log(`  SKIP  ${name} (${reason})`);
+};
+
 const section = (t) => console.log(`\n${t}`);
 const stamp = Date.now();
 
@@ -102,10 +106,21 @@ const run = async () => {
   });
   const addr = { fullName: "Phase One", phone: "9000000001", line1: "1 Test Road", city: "Nashik", state: "Maharashtra", pincode: "422001" };
   const placed = await call("POST", "/orders", {
-    token, body: { items: cart, paymentMethod: "cod", shippingAddress: addr, couponCode: "HARVEST10" },
+    token,
+    body: {
+      items: cart,
+      paymentMethod: "cod",
+      shippingAddress: addr,
+      couponCode: "HARVEST10",
+    },
   });
 
-  if (placed.status === 201) {
+  if (placed.status === 429) {
+    skip(
+      "preview total matches charged total",
+      "order placement rate limited — wait a minute and re-run"
+    );
+  } else if (placed.status === 201) {
     const o = placed.data.order;
     check("order was created", !!o.orderNumber);
     check("charged subtotal equals previewed subtotal", o.subtotal === preview.data.subtotal, `${o.subtotal} vs ${preview.data.subtotal}`);

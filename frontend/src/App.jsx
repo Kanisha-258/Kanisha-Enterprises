@@ -27,6 +27,9 @@ const Register = lazy(() => import("./pages/Register"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const AdminCoupons = lazy(() => import("./pages/admin/AdminCoupons"));
+const AdminSuppliers = lazy(() => import("./pages/admin/AdminSuppliers"));
+const AdminPurchases = lazy(() => import("./pages/admin/AdminPurchases"));
+const AdminInventory = lazy(() => import("./pages/admin/AdminInventory"));
 
 const Cart = lazy(() => import("./pages/Cart"));
 const Checkout = lazy(() => import("./pages/Checkout"));
@@ -182,6 +185,9 @@ function App() {
               <Route path="customers" element={<AdminUsers />} />
               <Route path="blog" element={<AdminBlog />} />
               <Route path="coupons" element={<AdminCoupons />} />
+              <Route path="suppliers" element={<AdminSuppliers />} />
+              <Route path="purchases" element={<AdminPurchases />} />
+              <Route path="inventory" element={<AdminInventory />} />
             </Route>
           </Routes>
         </Suspense>

@@ -2,6 +2,7 @@ const Product = require("../models/Product");
 const Coupon = require("../models/Coupon");
 const AppError = require("./AppError");
 const { isCouponCode } = require("./validators");
+const { applyStockChanges } = require("./inventory");
 
 // Business rules, overridable from .env
 const SHIPPING_CHARGE = Number(process.env.SHIPPING_CHARGE ?? 49);
@@ -170,23 +171,52 @@ const validateAddress = (shippingAddress = {}) => {
   };
 };
 
-/** Decrements stock for each item. */
-const reserveStock = (items) =>
-  Promise.all(
-    items.map((item) =>
-      Product.updateOne(
-        { _id: item.product, stock: { $gte: item.quantity } },
-        { $inc: { stock: -item.quantity } }
-      )
-    )
+/**
+ * Decrements stock for each item, recording a SALE movement for each.
+ *
+ * Routed through applyStockChange so an order is a first-class entry in the
+ * stock ledger, and so the "not enough stock" check is the same atomic
+ * operation everywhere rather than a separate pre-check that could race.
+ */
+const reserveStock = (items, { orderId, performedBy } = {}) =>
+  applyStockChanges(
+    items.map((item) => ({
+      productId: item.product,
+      productName: item.name,
+      quantity: item.quantity,
+      direction: -1,
+      type: "SALE",
+      referenceType: "order",
+      referenceId: orderId || null,
+      performedBy: performedBy || null,
+      reason: "Sold to a customer",
+    })),
+    // A failed order must not leave half its items deducted.
+    true
   );
 
-/** Returns stock to the shelf. */
-const releaseStock = (items) =>
-  Promise.all(
-    items.map((item) =>
-      Product.updateOne({ _id: item.product }, { $inc: { stock: item.quantity } })
-    )
+/**
+ * Returns stock to the shelf, recording a SALE_CANCEL movement for each.
+ *
+ * `rollbackOnFailure` is off here on purpose. A cancellation is a series of
+ * independent corrections: if one product can't be restored, the others should
+ * still be, and the failure should be reported rather than silently undoing
+ * the restorations that did succeed.
+ */
+const releaseStock = (items, { orderId, performedBy, reason } = {}) =>
+  applyStockChanges(
+    items.map((item) => ({
+      productId: item.product,
+      productName: item.name,
+      quantity: item.quantity,
+      direction: 1,
+      type: "SALE_CANCEL",
+      referenceType: "order",
+      referenceId: orderId || null,
+      performedBy: performedBy || null,
+      reason: reason || "Returned to stock",
+    })),
+    false
   );
 
 /**

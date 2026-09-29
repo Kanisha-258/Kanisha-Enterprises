@@ -22,6 +22,9 @@ const Enquiry = require("../models/Enquiry");
 const Coupon = require("../models/Coupon");
 const Review = require("../models/Review");
 const PasswordResetToken = require("../models/PasswordResetToken");
+const Supplier = require("../models/Supplier");
+const Purchase = require("../models/Purchase");
+const StockMovement = require("../models/StockMovement");
 
 const args = process.argv.slice(2);
 const assumeYes = args.includes("--yes") || args.includes("-y");
@@ -62,6 +65,25 @@ const TEST_PATTERNS = {
   ],
   // Coupon codes created by the test suites and by the Phase 1 admin-page check.
   coupons: [/^SMOKE/i, /^PHASE1TEST$/i],
+  // Phase 2 suppliers, purchases and manual-adjustment notes.
+  suppliers: [/^PhaseTwoTest /i],
+  purchaseNotes: [/Phase 2 test/i],
+  movementReasons: [/Phase 2 test/i],
+
+  // Manual browser-verification rows. These are created by hand in the admin
+  // UI rather than by a script, so they need their own prefixes. All are
+  // distinctive enough that no real record could match them.
+  verificationProducts: [/^VERIFPROD/i, /^UNMOUNTPROD/i],
+  verificationSuppliers: [
+    /^VERIFICATION Supplier$/i,
+    /^UNMOUNT Supplier$/i,
+    /^RERUN Supplier$/i,
+    /^Sunita Seed Company$/i,
+    /^Krishna Fertilizers$/i,
+    /^Anand Agro Center$/i,
+    /^Ramesh Patil$/i,
+  ],
+  verificationCoupons: [/^VERIF20CODE$/i],
   // Domains that only the automated suites ever use.
   testEmailDomain: /@test\.com$/i,
 };
@@ -99,6 +121,20 @@ const run = async () => {
     $or: TEST_PATTERNS.products.map((p) => ({ name: p })),
   }).select("_id name");
 
+  // Products created by manual browser verification, e.g. VERIFPROD.
+  const verificationProducts = await Product.find({
+    $or: TEST_PATTERNS.verificationProducts.map((p) => ({ name: p })),
+  }).select("_id name");
+
+  // Suppliers and coupons created by manual browser verification.
+  const verificationSuppliers = await Supplier.find({
+    $or: TEST_PATTERNS.verificationSuppliers.map((p) => ({ name: p })),
+  }).select("_id name");
+
+  const verificationCoupons = await Coupon.find({
+    $or: TEST_PATTERNS.verificationCoupons.map((p) => ({ code: p })),
+  }).select("_id code");
+
   // --- Test customers ---
   const userFilter = removeAll
     ? { role: { $ne: "admin" } }
@@ -124,6 +160,44 @@ const run = async () => {
     $or: TEST_PATTERNS.coupons.map((p) => ({ code: p })),
   }).select("_id code");
 
+  // --- Phase 2 suppliers and purchases ---
+  // Matched on a dedicated name prefix, so a real supplier with a similar name
+  // is never caught.
+  const testSuppliers = await Supplier.find({
+    $or: TEST_PATTERNS.suppliers.map((p) => ({ name: p })),
+  }).select("_id name");
+
+  const testSupplierIds = [
+    ...testSuppliers.map((s) => s._id),
+    ...verificationSuppliers.map((s) => s._id),
+  ];
+
+  // Purchases left pointing at a supplier that no longer exists. These are
+  // orphans from an earlier version of this script that deleted suppliers
+  // before their purchases, and can only be test rows: the API never allows a
+  // supplier with purchase history to be hard-deleted, so a real purchase
+  // can't end up in this state.
+  const orphanedPurchases = await Purchase.aggregate([
+    { $lookup: { from: "suppliers", localField: "supplier", foreignField: "_id", as: "s" } },
+    { $match: { s: { $size: 0 } } },
+    { $project: { _id: 1, purchaseNumber: 1, total: 1, status: 1 } },
+  ]);
+
+  // Keyed off the test suppliers rather than the notes field, because most test
+  // purchases are created without any note and would otherwise survive.
+  const testPurchases = await Purchase.find({
+    $or: [
+      { supplier: { $in: testSupplierIds } },
+      ...TEST_PATTERNS.purchaseNotes.map((p) => ({ notes: p })),
+    ],
+  }).select("_id purchaseNumber");
+
+  // Stock movements the Phase 2 suite created when it normalised stock, so its
+  // assertions start from a known number next run.
+  const testMovements = await StockMovement.find({
+    $or: TEST_PATTERNS.movementReasons.map((p) => ({ reason: p })),
+  }).select("_id");
+
   // --- Everything a test account owns, counted for the report ---
   const [ownedOrders, ownedReviews, ownedTokens, testDomainEnquiries] = await Promise.all([
     Order.countDocuments({ user: { $in: userIds } }),
@@ -148,6 +222,22 @@ const run = async () => {
   console.log(`Enquiries (by @test.com email)  ${testDomainEnquiries}`);
   console.log(`Coupons            ${testCoupons.length}`);
   testCoupons.forEach((c) => console.log(`    - ${c.code}`));
+  console.log(`Suppliers          ${testSuppliers.length}`);
+  testSuppliers.forEach((s) => console.log(`    - ${s.name}`));
+  console.log(`Purchases          ${testPurchases.length}`);
+  testPurchases.forEach((p) => console.log(`    - ${p.purchaseNumber}`));
+  console.log(`  orphaned         ${orphanedPurchases.length}`);
+  orphanedPurchases.forEach((p) =>
+    console.log(`    - ${p.purchaseNumber}  (Rs${p.total}, ${p.status}, supplier missing)`)
+  );
+  console.log(`Stock movements    ${testMovements.length} (stock normalisation)`);
+  console.log(`Verification rows`);
+  console.log(`  products        ${verificationProducts.length}`);
+  verificationProducts.forEach((p) => console.log(`    - ${p.name}`));
+  console.log(`  suppliers       ${verificationSuppliers.length}`);
+  verificationSuppliers.forEach((s) => console.log(`    - ${s.name}`));
+  console.log(`  coupons         ${verificationCoupons.length}`);
+  verificationCoupons.forEach((c) => console.log(`    - ${c.code}`));
 
   if (dryRun) {
     console.log("\nThis was a DRY RUN. Nothing was deleted.");
@@ -157,8 +247,16 @@ const run = async () => {
   }
 
   // --- Delete ---
-  if (testProducts.length) {
-    await Product.deleteMany({ _id: { $in: testProducts.map((p) => p._id) } });
+  if (testProducts.length || verificationProducts.length) {
+    await Product.deleteMany({
+      _id: {
+        $in: [...testProducts.map((p) => p._id), ...verificationProducts.map((p) => p._id)],
+      },
+    });
+  }
+
+  if (verificationCoupons.length) {
+    await Coupon.deleteMany({ _id: { $in: verificationCoupons.map((c) => c._id) } });
   }
 
   if (userIds.length) {
@@ -179,6 +277,30 @@ const run = async () => {
   await Enquiry.deleteMany({ _id: { $in: testEnquiries.map((e) => e._id) } });
   await Coupon.deleteMany({ _id: { $in: testCoupons.map((c) => c._id) } });
 
+  if (testPurchases.length) {
+    // Purchases first, then their suppliers. Deleting the supplier first would
+    // leave the purchase pointing at nothing, and the next run — which finds
+    // test purchases by their supplier — would no longer recognise it.
+    await Purchase.deleteMany({ _id: { $in: testPurchases.map((p) => p._id) } });
+  }
+
+  if (orphanedPurchases.length) {
+    // No supplier to match on any more, so these can only be identified by
+    // being broken. Cleared here so the ledger doesn't accumulate debris.
+    await Purchase.deleteMany({ _id: { $in: orphanedPurchases.map((p) => p._id) } });
+  }
+
+  if (testSuppliers.length) {
+    await Supplier.deleteMany({ _id: { $in: testSupplierIds } });
+  }
+
+  if (testMovements.length) {
+    // Movements are immutable in normal operation. These are only the Phase 2
+    // suite's own stock-normalisation rows, which it will recreate on the next
+    // run, so removing them can't hide a real stock discrepancy.
+    await StockMovement.deleteMany({ _id: { $in: testMovements.map((m) => m._id) } });
+  }
+
   // --- Summary ---
   console.log("\nCurrent state:");
   console.log(`  Products: ${await Product.countDocuments()}`);
@@ -187,6 +309,9 @@ const run = async () => {
   console.log(`  Admins:   ${await User.countDocuments({ role: "admin" })}`);
   console.log(`  Enquiries:${await Enquiry.countDocuments()}`);
   console.log(`  Coupons:  ${await Coupon.countDocuments()}`);
+  console.log(`  Suppliers:${await Supplier.countDocuments()}`);
+  console.log(`  Purchases:${await Purchase.countDocuments()}`);
+  console.log(`  Movements:${await StockMovement.countDocuments()}`);
 
   await mongoose.connection.close();
   process.exit(0);

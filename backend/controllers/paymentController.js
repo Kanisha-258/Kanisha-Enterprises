@@ -94,9 +94,12 @@ const createPaymentOrder = asyncHandler(async (req, res) => {
   });
 
   try {
-    await reserveStock(orderItems);
+    await reserveStock(orderItems, { orderId: order._id });
   } catch (error) {
     await Order.findByIdAndDelete(order._id);
+
+    if (error.statusCode === 409) throw error;
+
     throw new AppError("Could not reserve stock. Please try again.", 500);
   }
 
@@ -106,7 +109,10 @@ const createPaymentOrder = asyncHandler(async (req, res) => {
   } catch (error) {
     // Payment gateway rejected us — undo the local order and free the stock.
     await Order.findByIdAndDelete(order._id);
-    await releaseStock(orderItems);
+    await releaseStock(orderItems, {
+      orderId: order._id,
+      reason: `Payment failed for ${order.orderNumber}, stock released`,
+    });
     throw error;
   }
 
@@ -207,7 +213,10 @@ const cancelPayment = asyncHandler(async (req, res) => {
   if (order.orderStatus !== "cancelled") {
     order.orderStatus = "cancelled";
     order.cancelledReason = "Payment was not completed";
-    await releaseStock(order.items);
+    await releaseStock(order.items, {
+      orderId: order._id,
+      reason: `Payment not completed for ${order.orderNumber}, stock released`,
+    });
     await order.save();
   }
 

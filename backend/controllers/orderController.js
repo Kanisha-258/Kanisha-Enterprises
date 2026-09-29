@@ -58,11 +58,16 @@ const createOrder = asyncHandler(async (req, res) => {
   });
 
   // Reserve stock after the insert; if anything fails, roll the order back
-  // rather than overselling.
+  // rather than overselling. Each deduction also writes a SALE row to the
+  // stock ledger, so every unit leaving the shop is accounted for.
   try {
-    await reserveStock(orderItems);
+    await reserveStock(orderItems, { orderId: order._id });
   } catch (error) {
     await Order.findByIdAndDelete(order._id);
+
+    // "Only N left" is useful to the customer; anything else is our problem.
+    if (error.statusCode === 409) throw error;
+
     throw new AppError("Could not reserve stock. Please try again.", 500);
   }
 
@@ -154,7 +159,14 @@ const cancelOrder = asyncHandler(async (req, res) => {
   order.orderStatus = "cancelled";
   order.cancelledReason = req.body?.reason || "Cancelled by customer";
 
-  await releaseStock(order.items);
+  // Each returned unit writes a SALE_CANCEL row, so the ledger shows the stock
+  // going out and coming back rather than silently reappearing.
+  await releaseStock(order.items, {
+    orderId: order._id,
+    performedBy: req.user.role === "admin" ? req.user._id : null,
+    reason: `Order ${order.orderNumber} cancelled: ${order.cancelledReason}`,
+  });
+
   await order.save();
 
   res.json({ success: true, message: "Order cancelled", order });
@@ -230,7 +242,16 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
   if (orderStatus === "cancelled") {
     order.cancelledReason = cancelledReason || "Cancelled by the shop";
     if (!wasCancelled) {
-      await releaseStock(order.items);
+      // Only restores stock if this order actually took it, so cancelling an
+      // order that was already cancelled can't inflate inventory.
+      if (order.paymentStatus !== "failed") {
+        await releaseStock(order.items, {
+          orderId: order._id,
+          performedBy: req.user._id,
+          reason: `Order ${order.orderNumber} cancelled by the shop: ${order.cancelledReason}`,
+        });
+      }
+
       // Refund an already-paid order so the finance numbers stay honest.
       if (order.paymentStatus === "paid") order.paymentStatus = "refunded";
     }

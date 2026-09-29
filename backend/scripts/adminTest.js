@@ -52,6 +52,17 @@ const check = (name, ok, detail = "") => {
   }
 };
 
+const skip = (name, reason) => {
+  console.log(`  SKIP  ${name} (${reason})`);
+};
+
+/**
+ * Order placement is rate limited to 10/minute per IP. Several suites running
+ * back to back exhaust that, and a 429 is the limiter working correctly rather
+ * than a broken endpoint, so it is reported as a skip instead of a failure.
+ */
+const isRateLimited = (res) => res.status === 429;
+
 const section = (t) => console.log(`\n${t}`);
 
 const run = async () => {
@@ -225,6 +236,7 @@ const run = async () => {
   const anyProduct = (await call("GET", "/products?inStock=true&limit=1")).data.products?.[0];
 
   let freshOrderId = null;
+  let orderRateLimited = false;
 
   if (shopper.data.token && anyProduct) {
     const placed = await call("POST", "/orders", {
@@ -246,6 +258,9 @@ const run = async () => {
     if (placed.status === 201) {
       freshOrderId = placed.data.order._id;
       check("places an order as a customer", true);
+    } else if (isRateLimited(placed)) {
+      orderRateLimited = true;
+      skip("places an order as a customer", "rate limited — wait a minute and re-run");
     } else {
       check("places an order as a customer", false, `${placed.status}: ${placed.data.message}`);
     }
@@ -258,7 +273,12 @@ const run = async () => {
     orders.data.orders?.find((o) => o._id === freshOrderId) ||
     orders.data.orders?.find((o) => o.orderStatus === "pending");
 
-  if (target) {
+  if (!freshOrderId && orderRateLimited) {
+    // No fresh order, and we can't place one right now, so the lifecycle
+    // checks below would be asserting against an unrelated order. Better to
+    // skip them than to report misleading passes.
+    skip("status changes", "no fresh order available (rate limited)");
+  } else if (target) {
     const confirmed = await call("PUT", `/orders/admin/${target._id}/status`, {
       token,
       body: { orderStatus: "confirmed" },

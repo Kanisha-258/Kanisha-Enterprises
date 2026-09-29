@@ -17,6 +17,7 @@ const blogRoutes = require("./routes/blogRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
 const couponRoutes = require("./routes/couponRoutes");
+const inventoryRoutes = require("./routes/inventoryRoutes");
 
 const app = express();
 
@@ -67,6 +68,10 @@ app.use("/api/blogs", blogRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/coupons", couponRoutes);
+
+// Suppliers, purchases and stock history. This router applies authMiddleware
+// and adminMiddleware itself, so there is no customer-facing route into it.
+app.use("/api/admin", inventoryRoutes);
 
 // Unmatched route -> error -> handler. Must stay last.
 app.use(notFound);

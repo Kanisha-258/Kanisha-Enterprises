@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
+
+// AnimatePresence is deliberately not used for the detail drawer. Its exit
+// animation completed but the node stayed mounted, leaving a strip that
+// swallowed clicks. useSlideOver removes the nodes outright instead.
+import useSlideOver from "../../hooks/useSlideOver";
 import {
   Search,
   Loader2,
@@ -44,6 +49,7 @@ export default function AdminOrders() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
+  const detailPanel = useSlideOver(Boolean(selected));
   const [updatingId, setUpdatingId] = useState(null);
 
   const load = async () => {
@@ -297,28 +303,26 @@ export default function AdminOrders() {
 
       {totalPages > 1 && <Pagination page={page} totalPages={totalPages} onChange={setPage} />}
 
-      {/* Detail drawer */}
-      <AnimatePresence>
-        {selected && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setSelected(null)}
-              className="fixed inset-0 z-[95] bg-sand-950/50 backdrop-blur-sm"
-              aria-hidden="true"
-            />
+      {/* Detail drawer. A plain CSS transition rather than AnimatePresence:
+          the exit animation completed but the node stayed mounted, leaving a
+          strip that swallowed clicks. See useSlideOver. */}
+      {detailPanel.mounted && selected && (
+        <>
+          <div
+            onClick={() => setSelected(null)}
+            className={`fixed inset-0 z-[95] bg-sand-950/50 backdrop-blur-sm transition-opacity duration-300 ${
+              detailPanel.shown ? "opacity-100" : "pointer-events-none opacity-0"
+            }`}
+            aria-hidden="true"
+          />
 
-            <motion.aside
-              initial={{ x: "100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "100%" }}
-              transition={{ type: "spring", stiffness: 320, damping: 34 }}
-              className="fixed inset-y-0 right-0 z-[96] flex w-full max-w-md flex-col bg-sand-50 shadow-2xl"
-              role="dialog"
-              aria-modal="true"
-            >
+          <div
+            role="dialog"
+            aria-modal="true"
+            className={`fixed inset-y-0 right-0 z-[96] flex w-full max-w-md flex-col bg-sand-50 shadow-2xl transition-transform duration-300 ease-out ${
+              detailPanel.shown ? "translate-x-0" : "pointer-events-none translate-x-full"
+            }`}
+          >
               <div className="flex items-center justify-between border-b border-sand-200 bg-white px-6 py-4">
                 <div>
                   <h2 className="font-display text-lg font-bold text-sand-900">
@@ -440,10 +444,9 @@ export default function AdminOrders() {
                   </div>
                 )}
               </div>
-            </motion.aside>
-          </>
-        )}
-      </AnimatePresence>
+          </div>
+        </>
+      )}
     </div>
   );
 }

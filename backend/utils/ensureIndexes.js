@@ -10,6 +10,9 @@ const MODELS = [
   require("../models/Coupon"),
   require("../models/Blog"),
   require("../models/PasswordResetToken"),
+  require("../models/Supplier"),
+  require("../models/Purchase"),
+  require("../models/StockMovement"),
 ];
 
 /**

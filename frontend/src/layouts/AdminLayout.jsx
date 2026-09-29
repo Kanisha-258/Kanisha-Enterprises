@@ -14,6 +14,9 @@ import {
   Leaf,
   Bell,
   Ticket,
+  Truck,
+  ShoppingCart as CartIcon,
+  Boxes,
 } from "lucide-react";
 
 import useAuthStore from "../store/authStore";
@@ -25,6 +28,9 @@ const NAV = [
   { to: "/admin/products", label: "Products", icon: Package },
   { to: "/admin/enquiries", label: "Enquiries", icon: Mail, badge: "enquiries" },
   { to: "/admin/coupons", label: "Coupons", icon: Ticket },
+  { to: "/admin/suppliers", label: "Suppliers", icon: Truck },
+  { to: "/admin/purchases", label: "Purchases", icon: CartIcon },
+  { to: "/admin/inventory", label: "Inventory", icon: Boxes },
   { to: "/admin/customers", label: "Customers", icon: Users },
   { to: "/admin/blog", label: "Blog posts", icon: FileText },
 ];

@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
+
+// AnimatePresence is deliberately not used for the editor. Its exit animation
+// completed but the node stayed mounted, leaving a strip that swallowed clicks.
+// useSlideOver removes the nodes outright instead.
+import useSlideOver from "../../hooks/useSlideOver";
 import {
   Plus,
   Pencil,
@@ -48,6 +53,7 @@ export default function AdminBlog() {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const formPanel = useSlideOver(showForm);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyPost);
   const [saving, setSaving] = useState(false);
@@ -252,29 +258,27 @@ export default function AdminBlog() {
         </div>
       )}
 
-      {/* Editor */}
-      <AnimatePresence>
-        {showForm && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowForm(false)}
-              className="fixed inset-0 z-[95] bg-sand-950/50 backdrop-blur-sm"
-              aria-hidden="true"
-            />
+      {/* Editor. A plain CSS transition rather than AnimatePresence: the exit
+          animation completed but the node stayed mounted, leaving a strip that
+          swallowed clicks. See useSlideOver. */}
+      {formPanel.mounted && (
+        <>
+          <div
+            onClick={() => setShowForm(false)}
+            className={`fixed inset-0 z-[95] bg-sand-950/50 backdrop-blur-sm transition-opacity duration-300 ${
+              formPanel.shown ? "opacity-100" : "pointer-events-none opacity-0"
+            }`}
+            aria-hidden="true"
+          />
 
-            <motion.div
-              initial={{ x: "100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "100%" }}
-              transition={{ type: "spring", stiffness: 320, damping: 34 }}
-              className="fixed inset-y-0 right-0 z-[96] flex w-full max-w-2xl flex-col bg-sand-50 shadow-2xl"
-              role="dialog"
-              aria-modal="true"
-              aria-label={editing ? "Edit post" : "New post"}
-            >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={editing ? "Edit post" : "New post"}
+            className={`fixed inset-y-0 right-0 z-[96] flex w-full max-w-2xl flex-col bg-sand-50 shadow-2xl transition-transform duration-300 ease-out ${
+              formPanel.shown ? "translate-x-0" : "pointer-events-none translate-x-full"
+            }`}
+          >
               <div className="flex items-center justify-between border-b border-sand-200 bg-white px-6 py-4">
                 <h2 className="font-display text-lg font-bold text-sand-900">
                   {editing ? "Edit post" : "Write a new post"}
@@ -288,7 +292,14 @@ export default function AdminBlog() {
                 </button>
               </div>
 
-              <form onSubmit={handleSave} className="flex-1 space-y-5 overflow-y-auto p-6">
+              {/* The footer buttons sit outside this element for layout, so the
+                  form needs an id and its submit button a `form` attribute.
+                  Without that association the button does nothing. */}
+              <form
+                id="blog-form"
+                onSubmit={handleSave}
+                className="flex-1 space-y-5 overflow-y-auto p-6"
+              >
                 <div>
                   <label className="text-sm font-semibold text-sand-700">Title *</label>
                   <input required value={form.title} onChange={set("title")} className={`mt-1.5 ${field}`} />
@@ -379,6 +390,7 @@ export default function AdminBlog() {
 
                 <button
                   type="submit"
+                  form="blog-form"
                   disabled={saving}
                   className="btn-shine flex flex-1 items-center justify-center gap-2 rounded-xl bg-brand-700 py-3 text-sm font-semibold text-white transition hover:bg-brand-800 disabled:opacity-60"
                 >
@@ -386,10 +398,9 @@ export default function AdminBlog() {
                   {editing ? "Save changes" : "Publish post"}
                 </button>
               </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+          </div>
+        </>
+      )}
     </div>
   );
 }
