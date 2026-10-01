@@ -10,16 +10,25 @@ import { OrderStatusBadge, PaymentStatusBadge } from "../components/ui/Badge";
 import { OrderRowSkeleton } from "../components/ui/Skeleton";
 import { ErrorState } from "../components/ui/Spinner";
 
+// One entry per order status, so no order is invisible from every filter.
+// "packed" was missing here, which meant a customer whose order was ready to
+// dispatch could only find it under "All".
 const TABS = [
   { value: "all", label: "All" },
   { value: "pending", label: "Pending" },
   { value: "confirmed", label: "Confirmed" },
+  { value: "packed", label: "Packed" },
   { value: "shipped", label: "Shipped" },
   { value: "delivered", label: "Delivered" },
   { value: "cancelled", label: "Cancelled" },
 ];
 
 export default function Orders() {
+  // Total units across the order, so "1 item" is not shown for an order of
+  // five bags of one product.
+  const unitCount = (order) =>
+    (order?.items || []).reduce((sum, i) => sum + (i.quantity || 0), 0);
+
   const [orders, setOrders] = useState([]);
   const [status, setStatus] = useState("all");
   const [loading, setLoading] = useState(true);
@@ -170,9 +179,20 @@ export default function Orders() {
                       )}
                     </div>
 
-                    <p className="min-w-0 flex-1 truncate text-sm text-sand-500">
-                      {order.items.map((i) => i.name).join(", ")}
-                    </p>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-sand-500">
+                        {order.items.map((i) => i.name).join(", ")}
+                      </p>
+                      {/* Units, not lines: `items.length` counts distinct
+                          products, so an order for 5kg of one seed would
+                          otherwise read "1 item". */}
+                      <p className="mt-0.5 text-xs text-sand-400">
+                        {unitCount(order)}{" "}
+                        {unitCount(order) === 1 ? "item" : "items"}
+                        {order.items.length > 1 && " · "}
+                        {order.items.length > 1 && `${order.items.length} products`}
+                      </p>
+                    </div>
                   </div>
 
                   {/* Footer row */}

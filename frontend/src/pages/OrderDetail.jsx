@@ -4,32 +4,23 @@ import { motion } from "framer-motion";
 import {
   ArrowLeft,
   MapPin,
-  Package,
   XCircle,
   Phone,
-  Check,
-  Clock,
-  Truck,
   Loader2,
   Star,
+  Info,
 } from "lucide-react";
 
 import { getOrderById, cancelOrder } from "../api/orderApi";
 import { createReview } from "../api/reviewApi";
 import ProductImage from "../components/ui/ProductImage";
 import Rating from "../components/ui/Rating";
-import { OrderStatusBadge, PaymentStatusBadge, ORDER_STEPS } from "../components/ui/Badge";
+import { OrderStatusBadge, PaymentStatusBadge } from "../components/ui/Badge";
 import { ErrorState } from "../components/ui/Spinner";
+import ConfirmDialog from "../components/ui/ConfirmDialog";
+import OrderTimeline from "../components/OrderTimeline";
 import { useToast } from "../components/ui/Toast";
 import business from "../config/business";
-
-const STEP_ICONS = {
-  pending: Clock,
-  confirmed: Check,
-  packed: Package,
-  shipped: Truck,
-  delivered: Check,
-};
 
 export default function OrderDetail() {
   const { id } = useParams();
@@ -40,11 +31,17 @@ export default function OrderDetail() {
   const [reviewedIds, setReviewedIds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [reviewing, setReviewing] = useState(null);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState("");
   const [submittingReview, setSubmittingReview] = useState(false);
+
+  // Whether a cancel button appears, and why not when it does not, both come
+  // from the API rather than from a status list duplicated in this file.
+  const [canCancel, setCanCancel] = useState(false);
+  const [cancelBlockedReason, setCancelBlockedReason] = useState("");
 
   const load = async () => {
     try {
@@ -54,6 +51,8 @@ export default function OrderDetail() {
       const data = await getOrderById(id);
       setOrder(data.order);
       setReviewedIds(data.reviewedProductIds || []);
+      setCanCancel(Boolean(data.canCancel));
+      setCancelBlockedReason(data.cancelBlockedReason || "");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -66,14 +65,20 @@ export default function OrderDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  const handleCancel = async () => {
-    if (!window.confirm("Are you sure you want to cancel this order?")) return;
-
+  const handleCancel = async (reason) => {
     setCancelling(true);
 
     try {
-      const updated = await cancelOrder(order._id, "Cancelled from the website");
+      const updated = await cancelOrder(
+        order._id,
+        reason.trim() || "Cancelled from the website"
+      );
       setOrder(updated);
+      setConfirmOpen(false);
+      // Re-read rather than trusting the local copy: the response carries the
+      // new history, but the cancel rules are decided server-side and may have
+      // changed underneath us.
+      await load();
       toast.success("Your order has been cancelled");
     } catch (err) {
       toast.error(err.message);
@@ -122,9 +127,7 @@ export default function OrderDetail() {
     );
   }
 
-  const canCancel = ["pending", "confirmed", "packed"].includes(order.orderStatus);
   const isCancelled = order.orderStatus === "cancelled";
-  const currentStep = ORDER_STEPS.indexOf(order.orderStatus);
 
   return (
     <section className="bg-sand-50 py-12 sm:py-16">
@@ -167,61 +170,21 @@ export default function OrderDetail() {
           </div>
         </motion.div>
 
-        {/* Progress tracker */}
-        {!isCancelled && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-            className="card mt-8 p-6"
-          >
-            <h2 className="font-display text-lg font-bold text-sand-900">
-              Delivery progress
-            </h2>
+        {/* Timeline */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+          className="card mt-8 p-6"
+        >
+          <h2 className="font-display text-lg font-bold text-sand-900">
+            Order progress
+          </h2>
 
-            <ol className="mt-6 flex items-start">
-              {ORDER_STEPS.map((step, i) => {
-                const done = i <= currentStep;
-                const Icon = STEP_ICONS[step];
-
-                return (
-                  <li key={step} className="relative flex flex-1 flex-col items-center text-center">
-                    {i < ORDER_STEPS.length - 1 && (
-                      <span className="absolute left-1/2 top-5 h-1 w-full bg-sand-200">
-                        <motion.span
-                          initial={{ scaleX: 0 }}
-                          animate={{ scaleX: i < currentStep ? 1 : 0 }}
-                          style={{ originX: 0 }}
-                          transition={{ duration: 0.5, delay: 0.2 + i * 0.1 }}
-                          className="block h-full w-full bg-brand-500"
-                        />
-                      </span>
-                    )}
-
-                    <motion.span
-                      initial={{ scale: 0.5, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      transition={{ delay: 0.2 + i * 0.1, type: "spring", stiffness: 260 }}
-                      className={`relative z-10 grid h-10 w-10 place-items-center rounded-full ring-4 ring-white ${
-                        done ? "bg-brand-600 text-white" : "bg-sand-200 text-sand-400"
-                      }`}
-                    >
-                      <Icon size={18} />
-                    </motion.span>
-
-                    <span
-                      className={`mt-2.5 text-xs font-semibold capitalize ${
-                        done ? "text-brand-700" : "text-sand-400"
-                      }`}
-                    >
-                      {step}
-                    </span>
-                  </li>
-                );
-              })}
-            </ol>
-          </motion.div>
-        )}
+          <div className="mt-6">
+            <OrderTimeline order={order} />
+          </div>
+        </motion.div>
 
         {isCancelled && (
           <div className="mt-8 flex gap-3 rounded-2xl border border-red-200 bg-red-50 p-5">
@@ -420,33 +383,55 @@ export default function OrderDetail() {
         </motion.div>
 
         {/* Actions */}
-        {canCancel && (
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+        <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+          {canCancel && (
             <button
-              onClick={handleCancel}
+              onClick={() => setConfirmOpen(true)}
               disabled={cancelling}
               className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-red-200 bg-white py-3.5 font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50"
             >
-              {cancelling ? (
-                <Loader2 size={17} className="animate-spin" />
-              ) : (
-                <XCircle size={17} />
-              )}
+              <XCircle size={17} />
               Cancel order
             </button>
+          )}
 
-            {business.phone && (
-              <a
-                href={`tel:${business.phone.replace(/\s/g, "")}`}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-sand-300 bg-white py-3.5 font-semibold text-sand-700 transition hover:border-brand-300 hover:text-brand-700"
-              >
-                <Phone size={17} />
-                Contact the shop
-              </a>
-            )}
-          </div>
-        )}
+          {/* Rather than silently hiding the option, say why it is gone. A
+              customer who cannot cancel will otherwise assume the button is
+              broken and try to contact support instead of understanding that
+              the order is already on its way. */}
+          {!canCancel && !isCancelled && cancelBlockedReason && (
+            <p className="flex flex-1 items-start gap-2.5 rounded-xl border border-sand-200 bg-white px-4 py-3.5 text-sm leading-relaxed text-sand-600">
+              <Info size={16} className="mt-0.5 shrink-0 text-sand-400" aria-hidden="true" />
+              <span>{cancelBlockedReason}</span>
+            </p>
+          )}
+
+          {business.phone && (
+            <a
+              href={`tel:${business.phone.replace(/\s/g, "")}`}
+              className={`${canCancel ? "flex-1" : ""} flex items-center justify-center gap-2 rounded-xl border border-sand-300 bg-white py-3.5 font-semibold text-sand-700 transition hover:border-brand-300 hover:text-brand-700`}
+            >
+              <Phone size={17} />
+              Contact the shop
+            </a>
+          )}
+        </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onClose={() => !cancelling && setConfirmOpen(false)}
+        onConfirm={handleCancel}
+        busy={cancelling}
+        showReason
+        title="Cancel this order?"
+        confirmLabel="Yes, cancel it"
+        cancelLabel="No, keep my order"
+        description="The items will be put back into stock and you will not be charged. Orders that have already shipped cannot be cancelled online — please call us for those."
+        reasonLabel="Reason (optional)"
+        reasonPlaceholder="Ordered by mistake, found it cheaper elsewhere…"
+        reasonHint="Telling us why helps us improve."
+      />
     </section>
   );
 }

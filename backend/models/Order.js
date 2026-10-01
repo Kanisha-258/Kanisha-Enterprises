@@ -1,5 +1,90 @@
 const mongoose = require("mongoose");
 
+/**
+ * One step in an order's payment history.
+ *
+ * Deliberately separate from the status event schema: the field name differs so
+ * a payment entry can never be mistaken for a status entry, and payment state
+ * has its own vocabulary.
+ */
+const paymentStatusEventSchema = new mongoose.Schema(
+  {
+    paymentStatus: {
+      type: String,
+      required: [true, "A payment event must name a payment status"],
+    },
+    at: {
+      type: Date,
+      default: Date.now,
+    },
+    by: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    actorRole: {
+      type: String,
+      enum: ["customer", "admin", "system"],
+      default: "system",
+    },
+    note: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: [300, "Note cannot exceed 300 characters"],
+    },
+  },
+  { _id: false, timestamps: false }
+);
+
+/**
+ * One step in an order's status history.
+ *
+ * A separate schema rather than raw objects so the shape is enforced and the
+ * API can populate the actor without the field accepting anything at all.
+ */
+const orderStatusEventSchema = new mongoose.Schema(
+  {
+    status: {
+      type: String,
+      required: [true, "A status event must name a status"],
+    },
+
+    // When the order entered this status. Defaults to now so a caller that
+    // forgets it still gets an honest timestamp rather than null.
+    at: {
+      type: Date,
+      default: Date.now,
+    },
+
+    // Who moved it. Null for the initial "order placed" entry, which belongs
+    // to the customer rather than to an admin, and for the rare case of a
+    // system-driven change.
+    by: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
+    // "customer" or "admin", so the timeline can be read without a second
+    // lookup when an admin has since been deleted.
+    actorRole: {
+      type: String,
+      enum: ["customer", "admin", "system"],
+      default: "system",
+    },
+
+    // Why, where it matters: a cancellation reason, or an admin note.
+    note: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: [300, "Note cannot exceed 300 characters"],
+    },
+  },
+  { _id: false, timestamps: false }
+);
+
 const orderItemSchema = new mongoose.Schema(
   {
     product: {
@@ -162,6 +247,33 @@ const orderSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+
+    /**
+     * Every status this order has been in, oldest first.
+     *
+     * Defaults to an empty array rather than being pre-filled, so orders that
+     * predate this field keep working and the UI can tell the difference
+     * between "no history" and "history that has not been recorded yet". A
+     * `pre("validate")` hook below seeds the opening entry for new orders.
+     */
+    statusHistory: {
+      type: [orderStatusEventSchema],
+      default: [],
+    },
+
+    /**
+     * Every change to `paymentStatus`, oldest first.
+     *
+     * Kept apart from `statusHistory` because money and dispatch are different
+     * conversations: an order can be delivered and still unpaid, and an order
+     * can be cancelled and refunded without ever shipping. Same empty-by-
+     * default rule as statusHistory — existing orders are not given invented
+     * entries.
+     */
+    paymentHistory: {
+      type: [paymentStatusEventSchema],
+      default: [],
+    },
   },
   {
     timestamps: true,
@@ -171,20 +283,18 @@ const orderSchema = new mongoose.Schema(
 /**
  * One order per clientOrderRef.
  *
- * Sparse, so every order that has no client reference (all of them, before
- * this field existed) is exempt and the index has nothing to compare. This is
- * the last line of defence for double submission: `createOrder` checks first
+ * The last line of defence for double submission: `createOrder` checks first
  * and returns the original, and if two identical requests ever slipped past
  * that check and raced, the second insert fails here rather than creating a
  * duplicate order.
+ *
+ * Partial rather than plain `sparse`, and the distinction matters. A sparse
+ * unique index still treats an explicit `null` as an indexed value, so with a
+ * default of null every order without a reference would collide with every
+ * other one — which is exactly what happened before this was changed. A
+ * partial index covering only documents where the field is actually a string
+ * exempts them properly.
  */
-// Partial rather than plain `sparse`, and the distinction matters.
-//
-// A sparse unique index still treats an explicit `null` as an indexed value,
-// so with a default of null every order without a reference would collide with
-// every other one — which is exactly what happened before this was changed.
-// A partial index that only covers documents where the field is actually a
-// string exempts them properly.
 orderSchema.index(
   { clientOrderRef: 1 },
   {
@@ -212,6 +322,49 @@ orderSchema.pre("validate", async function () {
   } while (await mongoose.models.Order.exists({ orderNumber: candidate }));
 
   this.orderNumber = candidate;
+});
+
+/**
+ * Seed the opening status-history entry on a new order.
+ *
+ * Only for a genuinely new order: the status a freshly created document starts
+ * at. Orders that existed before this field existed must keep an empty history,
+ * because inventing a backdated entry for them would be fabricating a record of
+ * when something happened. The UI tells those two cases apart — an empty
+ * history renders an inferred timeline and says so.
+ *
+ * Runs on "validate" rather than "save" so the entry is present on the
+ * in-memory document too, and `Order.create` returns it already populated.
+ */
+orderSchema.pre("validate", function () {
+  if (!this.isNew) return;
+
+  if (!Array.isArray(this.statusHistory) || this.statusHistory.length === 0) {
+    this.statusHistory = [
+      {
+        status: this.orderStatus || "pending",
+        at: new Date(),
+        // No actor: the order was placed by the customer through the
+        // storefront and createOrder does not attribute it to an admin
+        // account.
+        by: null,
+        actorRole: "customer",
+        note: "Order placed",
+      },
+    ];
+  }
+
+  if (!Array.isArray(this.paymentHistory) || this.paymentHistory.length === 0) {
+    this.paymentHistory = [
+      {
+        paymentStatus: this.paymentStatus || "pending",
+        at: new Date(),
+        by: null,
+        actorRole: "customer",
+        note: "Awaiting payment",
+      },
+    ];
+  }
 });
 
 module.exports = mongoose.model("Order", orderSchema);
