@@ -12,6 +12,14 @@ const loadUser = () => {
   }
 };
 
+/**
+ * Sessions only. Deliberately knows nothing about the cart: cartStore depends
+ * on this module, so importing back would be a cycle, and a cycle resolved the
+ * wrong way fails at module-eval time rather than at the call site.
+ *
+ * The cart is moved between accounts by useCartSync, which watches this store
+ * from a mounted component and so runs with both stores fully initialised.
+ */
 const useAuthStore = create((set, get) => ({
   token: localStorage.getItem(TOKEN_KEY) || null,
   user: loadUser(),

@@ -43,7 +43,11 @@ export default function Profile() {
 
   const setUser = useAuthStore((s) => s.setUser);
 
-  const [profile, setProfile] = useState({ name: "", phone: "" });
+  const [profile, setProfile] = useState({
+    name: "",
+    phone: "",
+    userType: "customer",
+  });
   const [addresses, setAddresses] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -62,7 +66,13 @@ export default function Profile() {
 
       const user = await getMe();
       setUser(user);
-      setProfile({ name: user.name || "", phone: user.phone || "" });
+      setProfile({
+        name: user.name || "",
+        phone: user.phone || "",
+        // Documents created before this field existed have no value, so fall
+        // back rather than showing an empty control.
+        userType: user.userType || "customer",
+      });
       setAddresses(user.addresses || []);
     } catch (err) {
       toast.error(err.message);
@@ -239,6 +249,40 @@ export default function Profile() {
                 />
                 <p className="mt-1.5 text-xs text-sand-400">
                   Email can't be changed. Contact us if you need it updated.
+                </p>
+              </div>
+
+              {/* Buyers can relabel themselves at any time — plenty of people
+                  start as a customer and later start reselling. It changes
+                  nothing about what the account can do. */}
+              <div>
+                <label className="text-sm font-semibold text-sand-700">
+                  Account type
+                </label>
+                <div className="mt-1.5 grid gap-2 sm:grid-cols-2">
+                  {[
+                    { value: "customer", label: "Customer" },
+                    { value: "dealer", label: "Dealer / reseller" },
+                  ].map(({ value, label }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-pressed={profile.userType === value}
+                      onClick={() => setProfile((p) => ({ ...p, userType: value }))}
+                      className={`rounded-xl border px-4 py-2.5 text-sm font-semibold transition ${
+                        profile.userType === value
+                          ? "border-brand-500 bg-brand-50 text-brand-800 ring-2 ring-brand-200"
+                          : "border-sand-200 bg-white text-sand-600 hover:border-sand-300"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1.5 text-xs text-sand-400">
+                  {profile.userType === "dealer"
+                    ? "We'll remember this when you buy in bulk. Save the profile to apply it."
+                    : "Buying for yourself. Save the profile to apply any change."}
                 </p>
               </div>
 

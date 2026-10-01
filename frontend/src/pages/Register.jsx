@@ -6,18 +6,19 @@ import {
   Mail,
   Phone,
   Lock,
-  Eye,
-  EyeOff,
   Loader2,
   Leaf,
   ArrowRight,
   AlertCircle,
   Check,
   MapPin,
+  Tractor,
+  UserRound as UserRoundIcon,
 } from "lucide-react";
 
 import { register } from "../api/authApi";
 import useAuthStore from "../store/authStore";
+import Field from "../components/ui/Field";
 
 const STATES = [
   "Andhra Pradesh", "Assam", "Bihar", "Chhattisgarh", "Delhi", "Goa", "Gujarat",
@@ -26,8 +27,26 @@ const STATES = [
   "Telangana", "Uttar Pradesh", "Uttarakhand", "West Bengal",
 ];
 
-const inputCls =
-  "w-full rounded-xl border border-sand-200 bg-white py-3 pl-11 pr-4 text-sm transition focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200";
+// What kind of buyer this is. It only labels the account — it grants no extra
+// access — so this is a two-button choice rather than a required dropdown.
+const ACCOUNT_TYPES = [
+  {
+    value: "customer",
+    label: "I'm buying for myself",
+    hint: "Seeds, fertilisers and tools for my own fields",
+    Icon: UserRoundIcon,
+  },
+  {
+    value: "dealer",
+    label: "I'm a dealer / reseller",
+    hint: "Buying in bulk to supply other farmers",
+    Icon: Tractor,
+  },
+];
+
+// Bare inputs (no Field wrapper) share this, so the two steps look identical.
+const bareCls =
+  "w-full rounded-xl border border-sand-200 bg-white px-4 py-3 text-sm text-sand-900 transition placeholder:text-sand-400 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -35,7 +54,6 @@ export default function Register() {
   const setAuth = useAuthStore((s) => s.setAuth);
 
   const [step, setStep] = useState(1);
-  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -48,6 +66,7 @@ export default function Register() {
     city: "",
     state: "",
     pincode: "",
+    userType: "customer",
   });
 
   const redirectTo = location.state?.from?.pathname || "/dashboard";
@@ -105,20 +124,31 @@ export default function Register() {
         <div className="card p-8 sm:p-10">
           <div className="text-center">
             <motion.span
-              initial={{ scale: 0, rotate: -30 }}
-              animate={{ scale: 1, rotate: 0 }}
-              transition={{ delay: 0.15, type: "spring", stiffness: 260, damping: 14 }}
+              initial={{ scale: 0.85, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.1, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
               className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 text-white shadow-glow"
             >
               <Leaf size={27} />
             </motion.span>
 
-            <h1 className="mt-6 font-display text-2xl font-bold text-sand-900 sm:text-3xl">
+            <motion.h1
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.16, duration: 0.5 }}
+              className="mt-6 font-display text-2xl font-bold text-sand-900 sm:text-3xl"
+            >
               Create your account
-            </h1>
-            <p className="mt-2 text-sm text-sand-500">
+            </motion.h1>
+
+            <motion.p
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.22, duration: 0.5 }}
+              className="mt-2 text-sm text-sand-500"
+            >
               Order faster and keep track of every delivery.
-            </p>
+            </motion.p>
           </div>
 
           {/* Step indicator */}
@@ -153,7 +183,7 @@ export default function Register() {
           </div>
 
           <form onSubmit={step === 1 ? goToStep2 : handleSubmit} className="mt-8 space-y-5">
-            <AnimatePresence mode="wait">
+            <AnimatePresence mode="wait" initial={false}>
               {step === 1 ? (
                 <motion.div
                   key="step1"
@@ -163,94 +193,123 @@ export default function Register() {
                   transition={{ duration: 0.25 }}
                   className="space-y-5"
                 >
+                  <Field
+                    label="Full name"
+                    name="name"
+                    icon={UserRound}
+                    required
+                    value={form.name}
+                    onChange={set("name")}
+                    placeholder="Your name"
+                  />
+
+                  <Field
+                    label="Email address"
+                    name="email"
+                    type="email"
+                    icon={Mail}
+                    autoComplete="email"
+                    required
+                    value={form.email}
+                    onChange={set("email")}
+                    placeholder="you@example.com"
+                  />
+
+                  <Field
+                    label="Mobile number"
+                    name="phone"
+                    type="tel"
+                    icon={Phone}
+                    inputMode="numeric"
+                    maxLength={10}
+                    autoComplete="tel"
+                    required
+                    value={form.phone}
+                    onChange={(e) =>
+                      setForm((p) => ({
+                        ...p,
+                        phone: e.target.value.replace(/\D/g, "").slice(0, 10),
+                      }))
+                    }
+                    placeholder="10-digit mobile"
+                  />
+
+                  <Field
+                    label="Password"
+                    name="password"
+                    type="password"
+                    icon={Lock}
+                    autoComplete="new-password"
+                    minLength={8}
+                    required
+                    value={form.password}
+                    onChange={set("password")}
+                    placeholder="At least 8 characters"
+                    hint="Use at least 8 characters. Avoid names and birthdays."
+                  />
+
+                  {/* Account type. Optional, and defaults to a plain customer,
+                      so the sign-up flow is unchanged for anyone who skips it. */}
                   <div>
-                    <label className="text-sm font-semibold text-sand-700">
-                      Full name
-                    </label>
-                    <div className="relative mt-1.5">
-                      <UserRound size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sand-400" />
-                      <input
-                        required
-                        value={form.name}
-                        onChange={set("name")}
-                        placeholder="Your name"
-                        className={inputCls}
-                      />
+                    <span className="block text-sm font-semibold text-sand-700">
+                      What are you buying for?
+                    </span>
+
+                    <div className="mt-1.5 grid gap-3 sm:grid-cols-2">
+                      {ACCOUNT_TYPES.map(({ value, label, hint, Icon }) => {
+                        const selected = form.userType === value;
+
+                        return (
+                          <button
+                            key={value}
+                            type="button"
+                            aria-pressed={selected}
+                            onClick={() => {
+                              setForm((p) => ({ ...p, userType: value }));
+                              setError("");
+                            }}
+                            className={`flex items-start gap-3 rounded-xl border p-3.5 text-left transition ${
+                              selected
+                                ? "border-brand-500 bg-brand-50 ring-2 ring-brand-200"
+                                : "border-sand-200 bg-white hover:border-sand-300"
+                            }`}
+                          >
+                            <span
+                              className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg transition ${
+                                selected
+                                  ? "bg-brand-600 text-white"
+                                  : "bg-sand-100 text-sand-500"
+                              }`}
+                            >
+                              <Icon size={16} />
+                            </span>
+
+                            <span className="min-w-0">
+                              <span className="block text-sm font-semibold text-sand-800">
+                                {label}
+                              </span>
+                              <span className="mt-0.5 block text-xs leading-snug text-sand-500">
+                                {hint}
+                              </span>
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
-                  <div>
-                    <label className="text-sm font-semibold text-sand-700">
-                      Email address
-                    </label>
-                    <div className="relative mt-1.5">
-                      <Mail size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sand-400" />
-                      <input
-                        required
-                        type="email"
-                        autoComplete="email"
-                        value={form.email}
-                        onChange={set("email")}
-                        placeholder="you@example.com"
-                        className={inputCls}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-semibold text-sand-700">
-                      Mobile number
-                    </label>
-                    <div className="relative mt-1.5">
-                      <Phone size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sand-400" />
-                      <input
-                        required
-                        type="tel"
-                        inputMode="numeric"
-                        maxLength={10}
-                        autoComplete="tel"
-                        value={form.phone}
-                        onChange={(e) =>
-                          setForm((p) => ({
-                            ...p,
-                            phone: e.target.value.replace(/\D/g, "").slice(0, 10),
-                          }))
-                        }
-                        placeholder="10-digit mobile"
-                        className={inputCls}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-semibold text-sand-700">
-                      Password
-                    </label>
-                    <div className="relative mt-1.5">
-                      <Lock size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sand-400" />
-                      <input
-                        required
-                        type={showPassword ? "text" : "password"}
-                        autoComplete="new-password"
-                        minLength={8}
-                        value={form.password}
-                        onChange={set("password")}
-                        placeholder="At least 8 characters"
-                        className="w-full rounded-xl border border-sand-200 bg-white py-3 pl-11 pr-11 text-sm transition focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword((v) => !v)}
-                        className="absolute right-3.5 top-1/2 -translate-y-1/2 rounded-lg p-1 text-sand-400 transition hover:text-sand-700"
-                        aria-label={showPassword ? "Hide password" : "Show password"}
+                  <div className="min-h-[3.25rem]" aria-live="polite">
+                    {error && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="flex gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm text-red-700"
+                        role="alert"
                       >
-                        {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-                      </button>
-                    </div>
-
-                    <p className="mt-2 text-xs text-sand-400">
-                      Use at least 8 characters. Avoid names and birthdays.
-                    </p>
+                        <AlertCircle size={17} className="mt-0.5 shrink-0" />
+                        {error}
+                      </motion.div>
+                    )}
                   </div>
 
                   <button
@@ -274,41 +333,47 @@ export default function Register() {
                     You can change it any time.
                   </p>
 
-                  <div>
-                    <label className="text-sm font-semibold text-sand-700">
-                      Address line 1
-                    </label>
-                    <div className="relative mt-1.5">
-                      <MapPin size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sand-400" />
-                      <input
-                        required
-                        value={form.address}
-                        onChange={set("address")}
-                        placeholder="House / street"
-                        className={inputCls}
-                      />
-                    </div>
-                  </div>
+                  <Field
+                    label="Address line 1"
+                    name="address"
+                    icon={MapPin}
+                    required
+                    value={form.address}
+                    onChange={set("address")}
+                    placeholder="House / street"
+                  />
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div>
-                      <label className="text-sm font-semibold text-sand-700">City</label>
+                      <label
+                        htmlFor="reg-city"
+                        className="block text-sm font-semibold text-sand-700"
+                      >
+                        City
+                      </label>
                       <input
+                        id="reg-city"
                         required
                         value={form.city}
                         onChange={set("city")}
                         placeholder="Your city"
-                        className="mt-1.5 w-full rounded-xl border border-sand-200 bg-white px-4 py-3 text-sm transition focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200"
+                        className={`mt-1.5 ${bareCls}`}
                       />
                     </div>
 
                     <div>
-                      <label className="text-sm font-semibold text-sand-700">State</label>
+                      <label
+                        htmlFor="reg-state"
+                        className="block text-sm font-semibold text-sand-700"
+                      >
+                        State
+                      </label>
                       <select
+                        id="reg-state"
                         required
                         value={form.state}
                         onChange={set("state")}
-                        className="mt-1.5 w-full rounded-xl border border-sand-200 bg-white px-4 py-3 text-sm transition focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200"
+                        className={`mt-1.5 ${bareCls}`}
                       >
                         <option value="">Select state</option>
                         {STATES.map((s) => (
@@ -320,35 +385,35 @@ export default function Register() {
                     </div>
                   </div>
 
-                  <div>
-                    <label className="text-sm font-semibold text-sand-700">Pincode</label>
-                    <input
-                      required
-                      inputMode="numeric"
-                      maxLength={6}
-                      value={form.pincode}
-                      onChange={(e) =>
-                        setForm((p) => ({
-                          ...p,
-                          pincode: e.target.value.replace(/\D/g, "").slice(0, 6),
-                        }))
-                      }
-                      placeholder="6-digit pincode"
-                      className="mt-1.5 w-full rounded-xl border border-sand-200 bg-white px-4 py-3 text-sm transition focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200"
-                    />
-                  </div>
+                  <Field
+                    label="Pincode"
+                    name="pincode"
+                    inputMode="numeric"
+                    maxLength={6}
+                    required
+                    value={form.pincode}
+                    onChange={(e) =>
+                      setForm((p) => ({
+                        ...p,
+                        pincode: e.target.value.replace(/\D/g, "").slice(0, 6),
+                      }))
+                    }
+                    placeholder="6-digit pincode"
+                  />
 
-                  {error && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="flex gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm text-red-700"
-                      role="alert"
-                    >
-                      <AlertCircle size={17} className="mt-0.5 shrink-0" />
-                      {error}
-                    </motion.div>
-                  )}
+                  <div className="min-h-[3.25rem]" aria-live="polite">
+                    {error && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="flex gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm text-red-700"
+                        role="alert"
+                      >
+                        <AlertCircle size={17} className="mt-0.5 shrink-0" />
+                        {error}
+                      </motion.div>
+                    )}
+                  </div>
 
                   <div className="flex gap-3">
                     <button

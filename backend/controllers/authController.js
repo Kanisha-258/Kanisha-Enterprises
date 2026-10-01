@@ -11,6 +11,10 @@ const { isEmail, isPhone, isNonEmptyString } = require("../utils/validators");
 
 const BCRYPT_ROUNDS = 12;
 
+// Must match the User model's userType enum. Kept as a constant so the
+// registration endpoint and the model cannot drift apart unnoticed.
+const USER_TYPES = ["customer", "dealer"];
+
 // How long a reset link stays usable.
 const RESET_TTL_MINUTES = Number(process.env.PASSWORD_RESET_TTL_MINUTES || 60);
 
@@ -44,7 +48,8 @@ const safeEqualHex = (a, b) => {
 
 // POST /api/auth/register
 const register = asyncHandler(async (req, res) => {
-  const { name, email, phone, password, address, city, state, pincode } = req.body;
+  const { name, email, phone, password, address, city, state, pincode, userType } =
+    req.body;
 
   if (!isNonEmptyString(name)) {
     throw new AppError("Please enter your name", 400);
@@ -69,6 +74,17 @@ const register = asyncHandler(async (req, res) => {
 
   // Note: `role` is never read from the request body, so a user can never
   // register themselves as an admin.
+  //
+  // `userType` is different: a buyer may honestly declare that they are a
+  // dealer, exactly as they declare their own name. It is allowlisted here
+  // rather than passed through, so an unknown value can never reach the
+  // document, and it grants no privilege — adminMiddleware only reads `role`.
+  const requestedType = typeof userType === "string" ? userType.trim() : "";
+
+  if (requestedType && !USER_TYPES.includes(requestedType)) {
+    throw new AppError("Please choose a valid account type", 400);
+  }
+
   const user = await User.create({
     name: name.trim(),
     email: normalisedEmail,
@@ -78,6 +94,7 @@ const register = asyncHandler(async (req, res) => {
     city,
     state,
     pincode,
+    ...(requestedType ? { userType: requestedType } : {}),
   });
 
   res.status(201).json({
@@ -129,7 +146,7 @@ const getMe = asyncHandler(async (req, res) => {
 
 // PUT /api/auth/me   (protected) — update profile fields
 const updateMe = asyncHandler(async (req, res) => {
-  const { name, phone, address, city, state, pincode } = req.body;
+  const { name, phone, address, city, state, pincode, userType } = req.body;
   const user = req.user;
 
   if (name !== undefined) {
@@ -145,6 +162,19 @@ const updateMe = asyncHandler(async (req, res) => {
   if (city !== undefined) user.city = city;
   if (state !== undefined) user.state = state;
   if (pincode !== undefined) user.pincode = pincode;
+
+  // Same rule as registration: allowlisted, and it only labels the account.
+  // A customer can mark themselves a dealer; nobody can use this to reach an
+  // admin endpoint, because adminMiddleware never looks at userType.
+  if (userType !== undefined) {
+    const requestedType = typeof userType === "string" ? userType.trim() : "";
+
+    if (!USER_TYPES.includes(requestedType)) {
+      throw new AppError("Please choose a valid account type", 400);
+    }
+
+    user.userType = requestedType;
+  }
 
   await user.save();
 

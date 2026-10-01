@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { Trash2, ShoppingBag, ArrowRight, ShoppingCart, Truck } from "lucide-react";
+import { Trash2, ShoppingBag, ArrowRight, ShoppingCart, Truck, AlertCircle, Loader2 } from "lucide-react";
 
 import ProductImage from "../components/ui/ProductImage";
 import QuantityStepper from "../components/ui/QuantityStepper";
@@ -9,6 +9,37 @@ import EmptyState from "../components/ui/EmptyState";
 import { useToast } from "../components/ui/Toast";
 import { getCouponConfig } from "../api/couponApi";
 import useCartStore, { selectCartCount, selectCartSubtotal } from "../store/cartStore";
+
+/**
+ * Says whether the basket is safely stored on the account.
+ *
+ * Silent by design in the happy case — this is a reassurance, not a feature.
+ * The one thing it must never do is claim success when the save failed, so an
+ * error is stated plainly. The cart itself is still correct locally either way;
+ * this only concerns the copy that follows the customer to another device.
+ */
+function CartSyncNote({ status }) {
+  if (status === "error") {
+    return (
+      <p className="mt-2 flex items-center gap-1.5 text-xs text-wheat-700">
+        <AlertCircle size={13} />
+        Saved on this device only — we couldn&rsquo;t reach the server to save
+        your cart. Your order will still work.
+      </p>
+    );
+  }
+
+  if (status === "syncing") {
+    return (
+      <p className="mt-2 flex items-center gap-1.5 text-xs text-sand-400">
+        <Loader2 size={13} className="animate-spin" />
+        Saving your cart…
+      </p>
+    );
+  }
+
+  return null;
+}
 
 export default function Cart() {
   const navigate = useNavigate();
@@ -20,6 +51,7 @@ export default function Cart() {
   const updateQuantity = useCartStore((s) => s.updateQuantity);
   const removeItem = useCartStore((s) => s.removeItem);
   const clearCart = useCartStore((s) => s.clearCart);
+  const syncStatus = useCartStore((s) => s.syncStatus);
 
   // Delivery thresholds come from the backend so this page can't disagree
   // with what checkout actually charges.
@@ -82,6 +114,7 @@ export default function Cart() {
             <p className="mt-2 text-sand-500">
               {count} item{count === 1 ? "" : "s"} ready to order
             </p>
+            <CartSyncNote status={syncStatus} />
           </div>
 
           <button
@@ -160,9 +193,18 @@ export default function Cart() {
                         />
 
                         <div className="text-right">
-                          <p className="font-display text-xl font-bold text-sand-900">
+                          {/* Keyed on quantity, so the line total settles
+                              visibly when the stepper is used instead of
+                              silently changing. */}
+                          <motion.p
+                            key={`${item._id}-${item.quantity}`}
+                            initial={{ opacity: 0.5, y: -4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                            className="font-display text-xl font-bold text-sand-900"
+                          >
                             ₹{(item.price * item.quantity).toLocaleString("en-IN")}
-                          </p>
+                          </motion.p>
                           {item.quantity > 1 && (
                             <p className="text-xs text-sand-400">
                               ₹{item.price.toLocaleString("en-IN")} each

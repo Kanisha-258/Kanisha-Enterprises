@@ -16,9 +16,46 @@ const {
 // An order can no longer be changed once it has left the shop.
 const CANCELLABLE_STATUSES = ["pending", "confirmed", "packed"];
 
+/**
+ * The client's reference for one checkout attempt, or null.
+ *
+ * Strictly validated rather than passed through, because it is used as a
+ * uniqueness key: an arbitrary string here could be crafted to collide with
+ * somebody else's order reference. UUID-shaped or nothing.
+ */
+const readClientOrderRef = (value) => {
+  if (value === undefined || value === null || value === "") return null;
+
+  const ref = String(value).trim();
+
+  if (!/^[a-z\d-]{8,64}$/i.test(ref)) {
+    throw new AppError("Invalid order reference", 400);
+  }
+
+  return ref;
+};
+
 // POST /api/orders   (protected) — place an order
 const createOrder = asyncHandler(async (req, res) => {
   const { items, paymentMethod, couponCode, notes } = req.body;
+  const clientOrderRef = readClientOrderRef(req.body?.clientOrderRef);
+
+  // A repeat of an attempt that already succeeded returns the order that
+  // exists, rather than creating a second one. Checked before anything else so
+  // a double submit costs one indexed lookup instead of a full re-quote and a
+  // second stock deduction.
+  if (clientOrderRef) {
+    const existing = await Order.findOne({ clientOrderRef, user: req.user._id });
+
+    if (existing) {
+      return res.status(200).json({
+        success: true,
+        message: "Order already placed",
+        duplicate: true,
+        order: existing,
+      });
+    }
+  }
 
   if (!["cod", "razorpay"].includes(paymentMethod)) {
     throw new AppError("Choose a valid payment method", 400);
@@ -43,19 +80,45 @@ const createOrder = asyncHandler(async (req, res) => {
     appliedCoupon,
   } = await quoteOrder(items, couponCode);
 
-  const order = await Order.create({
-    user: req.user._id,
-    items: orderItems,
-    shippingAddress,
-    subtotal,
-    discount,
-    shippingCharge,
-    total,
-    paymentMethod,
-    paymentStatus: "pending",
-    orderStatus: "pending",
-    notes: notes || "",
-  });
+  let order;
+
+  try {
+    order = await Order.create({
+      user: req.user._id,
+      items: orderItems,
+      shippingAddress,
+      subtotal,
+      discount,
+      shippingCharge,
+      total,
+      paymentMethod,
+      paymentStatus: "pending",
+      orderStatus: "pending",
+      notes: notes || "",
+      // Only written when the client sent one. Setting the field to null
+      // explicitly would put every ref-less order inside the unique index.
+      ...(clientOrderRef ? { clientOrderRef } : {}),
+    });
+  } catch (error) {
+    // Two identical requests can both pass the lookup above and only collide
+    // at the unique index — a genuine race. The loser didn't create anything,
+    // so hand back the winner's order instead of surfacing a 409 the customer
+    // would read as a failure.
+    if (error.code === 11000 && clientOrderRef) {
+      const winner = await Order.findOne({ clientOrderRef, user: req.user._id });
+
+      if (winner) {
+        return res.status(200).json({
+          success: true,
+          message: "Order already placed",
+          duplicate: true,
+          order: winner,
+        });
+      }
+    }
+
+    throw error;
+  }
 
   // Reserve stock after the insert; if anything fails, roll the order back
   // rather than overselling. Each deduction also writes a SALE row to the

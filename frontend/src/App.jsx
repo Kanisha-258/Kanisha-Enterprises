@@ -7,6 +7,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import GuestRoute from "./components/GuestRoute";
 import AdminRoute from "./components/AdminRoute";
 import { ToastProvider } from "./components/ui/Toast";
+import useCartSync from "./hooks/useCartSync";
 
 /**
  * Every page is loaded on demand, so a first-time visitor only downloads the
@@ -61,6 +62,11 @@ function RouteFallback() {
 }
 
 function App() {
+  // Mounted above the router and outside Suspense: it has to be watching the
+  // session before any page renders, or a signed-in customer would briefly see
+  // a guest cart.
+  useCartSync();
+
   return (
     <ToastProvider>
       <BrowserRouter>

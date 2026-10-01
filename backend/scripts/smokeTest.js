@@ -181,7 +181,10 @@ const run = async () => {
         shippingAddress: { fullName: "A", phone: "123", line1: "", city: "", state: "" },
       },
     });
-    check("rejects an incomplete address", badAddress.status === 400, `got ${badAddress.status}`);
+    if (guard(badAddress, "rejects an incomplete address")) {
+      check("rejects an incomplete address", badAddress.status === 400,
+        `got ${badAddress.status}`);
+    }
 
     if (first) {
       const noSuchProduct = await call("POST", "/orders", {
@@ -192,7 +195,10 @@ const run = async () => {
           shippingAddress: validAddress,
         },
       });
-      check("rejects an unknown product", noSuchProduct.status === 400, `got ${noSuchProduct.status}`);
+      if (guard(noSuchProduct, "rejects an unknown product")) {
+        check("rejects an unknown product", noSuchProduct.status === 400,
+          `got ${noSuchProduct.status}`);
+      }
 
       const tooMany = await call("POST", "/orders", {
         token,
@@ -202,7 +208,10 @@ const run = async () => {
           shippingAddress: validAddress,
         },
       });
-      check("rejects more than available stock", tooMany.status === 400, `got ${tooMany.status}`);
+      if (guard(tooMany, "rejects more than available stock")) {
+        check("rejects more than available stock", tooMany.status === 400,
+          `got ${tooMany.status}`);
+      }
 
       // Price is computed server-side from the database, never the request body.
       const order = await call("POST", "/orders", {

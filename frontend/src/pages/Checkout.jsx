@@ -76,6 +76,42 @@ export default function Checkout() {
   // Monotonic counter identifying the newest quote request.
   const quoteRequest = useRef(0);
 
+  /**
+   * A reference identifying one attempt at placing this order.
+   *
+   * Every retry of the *same* attempt reuses it. The server treats a repeat of
+   * a reference it has already seen as the same order and returns it, instead
+   * of creating a second one and deducting the stock twice. Disabling the
+   * button alone cannot do that — a second tab, or a retry after a response
+   * that was lost in transit, both get past it.
+   *
+   * Generated lazily on first use rather than during render: the value depends
+   * on a random source, and a render must be repeatable.
+   */
+  const clientOrderRef = useRef(null);
+
+  const newOrderRef = () =>
+    typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      // Uniqueness only has to be good enough that two different orders don't
+      // collide by accident. The server allowlists the shape regardless, so
+      // this is not a security boundary.
+      : `ref-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+
+  /** The reference for the attempt in progress, created on first ask. */
+  const orderRefFor = () => {
+    if (!clientOrderRef.current) {
+      clientOrderRef.current = newOrderRef();
+    }
+
+    return clientOrderRef.current;
+  };
+
+  /** A genuinely new order gets a new reference, not a replay of the last. */
+  const newOrderAttempt = () => {
+    clientOrderRef.current = null;
+  };
+
   const cartPayload = useMemo(
     () => items.map((i) => ({ productId: i._id, quantity: i.quantity })),
     [items]
@@ -236,9 +272,14 @@ export default function Checkout() {
         paymentMethod: "cod",
         couponCode: appliedCoupon?.code,
         notes,
+        // Same reference on a retry, so a request that actually reached the
+        // server cannot turn into two orders.
+        clientOrderRef: orderRefFor(),
       });
 
       clearCart();
+      // A real new order for the next basket, not a replay of this one.
+      newOrderAttempt();
       navigate(`/order-success/${order._id}`, { state: { order } });
     } catch (err) {
       toast.error(err.message);

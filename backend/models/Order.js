@@ -58,6 +58,27 @@ const orderSchema = new mongoose.Schema(
       },
     },
 
+    // A reference the client generates once per checkout attempt, so a repeat
+    // submission of the *same* attempt is recognised as the same order rather
+    // than a second one.
+    //
+    // This is what makes double-submit safe. Disabling the button only stops a
+    // user clicking twice; it does nothing about a second tab, a retry after a
+    // timeout, or a request the server actually received while the response
+    // was lost. Each of those would otherwise create a second order and deduct
+    // the stock twice.
+    //
+    // Deliberately has no `default: null`. A default would write the field on
+    // every order, and a unique index treats an explicit null as a value — so
+    // every order without a reference would collide with every other one.
+    // Left undefined, those documents fall outside the partial index below.
+    clientOrderRef: {
+      type: String,
+      // Bounded generously but not unbounded, so a junk value can't bloat the
+      // index. The client sends a UUID.
+      maxlength: [64, "Client order reference is too long"],
+    },
+
     // Full snapshot of the delivery address for this order.
     shippingAddress: {
       fullName: { type: String, default: "" },
@@ -146,6 +167,38 @@ const orderSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+/**
+ * One order per clientOrderRef.
+ *
+ * Sparse, so every order that has no client reference (all of them, before
+ * this field existed) is exempt and the index has nothing to compare. This is
+ * the last line of defence for double submission: `createOrder` checks first
+ * and returns the original, and if two identical requests ever slipped past
+ * that check and raced, the second insert fails here rather than creating a
+ * duplicate order.
+ */
+// Partial rather than plain `sparse`, and the distinction matters.
+//
+// A sparse unique index still treats an explicit `null` as an indexed value,
+// so with a default of null every order without a reference would collide with
+// every other one — which is exactly what happened before this was changed.
+// A partial index that only covers documents where the field is actually a
+// string exempts them properly.
+orderSchema.index(
+  { clientOrderRef: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { clientOrderRef: { $type: "string" } },
+  }
+);
+
+// "My orders", newest first, filtered by user. The same index serves the
+// admin's unfiltered newest-first list through its leading sort key.
+orderSchema.index({ user: 1, createdAt: -1 });
+
+// The admin list filters by status, so a compound index beats scanning.
+orderSchema.index({ orderStatus: 1, createdAt: -1 });
 
 // Auto-generate a human-friendly order number like "KE-6X4T9Q".
 orderSchema.pre("validate", async function () {

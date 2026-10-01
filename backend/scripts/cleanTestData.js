@@ -25,6 +25,7 @@ const PasswordResetToken = require("../models/PasswordResetToken");
 const Supplier = require("../models/Supplier");
 const Purchase = require("../models/Purchase");
 const StockMovement = require("../models/StockMovement");
+const Cart = require("../models/Cart");
 
 const args = process.argv.slice(2);
 const assumeYes = args.includes("--yes") || args.includes("-y");
@@ -199,12 +200,14 @@ const run = async () => {
   }).select("_id");
 
   // --- Everything a test account owns, counted for the report ---
-  const [ownedOrders, ownedReviews, ownedTokens, testDomainEnquiries] = await Promise.all([
-    Order.countDocuments({ user: { $in: userIds } }),
-    Review.countDocuments({ user: { $in: userIds } }),
-    PasswordResetToken.countDocuments({ user: { $in: userIds } }),
-    Enquiry.countDocuments({ email: TEST_PATTERNS.testEmailDomain }),
-  ]);
+  const [ownedOrders, ownedReviews, ownedTokens, ownedCarts, testDomainEnquiries] =
+    await Promise.all([
+      Order.countDocuments({ user: { $in: userIds } }),
+      Review.countDocuments({ user: { $in: userIds } }),
+      PasswordResetToken.countDocuments({ user: { $in: userIds } }),
+      Cart.countDocuments({ user: { $in: userIds } }),
+      Enquiry.countDocuments({ email: TEST_PATTERNS.testEmailDomain }),
+    ]);
 
   // --- Report ---
   console.log("\n" + "=".repeat(64));
@@ -217,6 +220,7 @@ const run = async () => {
   console.log(`  their orders     ${ownedOrders}`);
   console.log(`  their reviews    ${ownedReviews}`);
   console.log(`  their tokens     ${ownedTokens}`);
+  console.log(`  their carts      ${ownedCarts}`);
   console.log(`Enquiries (named)  ${testEnquiries.length}`);
   testEnquiries.forEach((e) => console.log(`    - "${e.subject}" from ${e.email}`));
   console.log(`Enquiries (by @test.com email)  ${testDomainEnquiries}`);
@@ -260,9 +264,11 @@ const run = async () => {
   }
 
   if (userIds.length) {
-    // Reviews and orders owned by these throwaway accounts go with them.
+    // Reviews, orders, saved carts and tokens owned by these throwaway
+    // accounts go with them.
     await Review.deleteMany({ user: { $in: userIds } });
     await Order.deleteMany({ user: { $in: userIds } });
+    await Cart.deleteMany({ user: { $in: userIds } });
     await PasswordResetToken.deleteMany({ user: { $in: userIds } });
     await Enquiry.deleteMany({ email: TEST_PATTERNS.testEmailDomain });
 

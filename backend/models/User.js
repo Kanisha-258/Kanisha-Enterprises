@@ -78,10 +78,26 @@ const userSchema = new mongoose.Schema(
       select: false, // hidden unless explicitly asked for with .select("+password")
     },
 
+    // Whether this person works for the shop. This is the only field that
+    // grants privilege, and it is never read from a request body.
     role: {
       type: String,
       enum: ["user", "admin"],
       default: "user",
+    },
+
+    // What kind of buyer this is. Deliberately separate from `role`: a dealer
+    // buys in bulk and may be offered dealer rates, but a dealer is still a
+    // customer, not staff. Keeping the two apart means adminMiddleware only
+    // ever has to look at `role`, so a dealer can never inherit admin access
+    // by accident.
+    //
+    // Defaults to "customer", so every account that already exists keeps
+    // working and no migration is required.
+    userType: {
+      type: String,
+      enum: ["customer", "dealer"],
+      default: "customer",
     },
 
     // Default address, mirrored from registration for quick checkout.

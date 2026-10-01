@@ -13,7 +13,52 @@ const MODELS = [
   require("../models/Supplier"),
   require("../models/Purchase"),
   require("../models/StockMovement"),
+  require("../models/Cart"),
 ];
+
+/**
+ * One-off index repairs, keyed by the exact index they replace.
+ *
+ * `createIndexes` will not change an existing index's options — MongoDB keeps
+ * the original and Mongoose errors out on the name clash. So when a unique
+ * index is corrected, the old one has to be dropped explicitly or the
+ * correction silently never takes effect.
+ *
+ * Each entry is removed once it has been applied, so this does not run forever
+ * and the migrations stay visible in the history rather than accumulating.
+ */
+const INDEX_MIGRATIONS = [
+  {
+    collection: "orders",
+    name: "clientOrderRef_1",
+    why:
+      "was sparse, which still indexes an explicit null. Every order with no " +
+      "client reference collided with every other one. Replaced by a partial " +
+      "index covering only documents where the field is a string.",
+  },
+];
+
+/** Drops superseded indexes so the corrected definitions can be built. */
+const applyIndexMigrations = async () => {
+  const db = mongoose.connection.db;
+  if (!db) return;
+
+  for (const migration of INDEX_MIGRATIONS) {
+    // eslint-disable-next-line no-await-in-loop
+    const existing = await db
+      .collection(migration.collection)
+      .indexes()
+      .catch(() => []);
+
+    const match = existing.find((i) => i.name === migration.name);
+
+    if (!match) continue;
+
+    // eslint-disable-next-line no-await-in-loop
+    await db.collection(migration.collection).dropIndex(migration.name);
+    console.log(`Rebuilt index ${migration.collection}.${migration.name} — ${migration.why}`);
+  }
+};
 
 /**
  * Builds the indexes declared in each schema.
@@ -28,6 +73,8 @@ const MODELS = [
  */
 const ensureIndexes = async () => {
   try {
+    await applyIndexMigrations();
+
     for (const Model of MODELS) {
       await Model.createIndexes();
     }
